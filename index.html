@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Foto con Realidad Aumentada</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <style>
+      body { margin: 0; overflow: hidden; font-family: sans-serif; }
+      #aviso-audio {
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.7); color: white; padding: 10px 18px;
+        border-radius: 20px; font-size: 14px; z-index: 999; pointer-events: none;
+      }
+      #error-msg {
+        display: flex; justify-content: center; align-items: center;
+        height: 100vh; text-align: center; padding: 20px; color: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // 1. Leer parámetros de la URL (?id=nombre&ratio=1.33)
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      const ratio = params.get('ratio') || '1';
+
+      if (!id) {
+        document.body.innerHTML = `
+          <div id="error-msg">
+            <h2>Falta el identificador del proyecto</h2>
+          </div>`;
+      } else {
+        const rutaMind = `./proyectos/${id}/targets.mind`;
+        const rutaVideo = `./proyectos/${id}/video.mp4`;
+
+        // 2. Inyectar la escena dinámicamente para que MindAR cargue la ruta correcta
+        document.body.innerHTML = `
+          <div id="aviso-audio">Toca la pantalla para activar el sonido</div>
+
+          <a-scene
+            mindar-image="imageTargetSrc: ${rutaMind};"
+            color-space="sRGB"
+            renderer="colorManagement: true, physicallyCorrectLights"
+            vr-mode-ui="enabled: false"
+            device-orientation-permission-ui="enabled: false"
+          >
+            <a-assets>
+              <video
+                id="mi-video"
+                src="${rutaVideo}"
+                preload="auto"
+                loop="true"
+                muted="true"
+                playsinline
+                webkit-playsinline
+                crossorigin="anonymous"
+              ></video>
+            </a-assets>
+
+            <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+            <a-entity id="marcador" mindar-image-target="targetIndex: 0">
+              <a-video
+                src="#mi-video"
+                position="0 0 0"
+                width="1"
+                height="${ratio}"
+                rotation="0 0 0"
+              ></a-video>
+            </a-entity>
+          </a-scene>
+        `;
+
+        // 3. Conectar eventos de reproducción y audio
+        const marcador = document.querySelector('#marcador');
+        const video = document.querySelector('#mi-video');
+        const aviso = document.querySelector('#aviso-audio');
+
+        marcador.addEventListener('targetFound', () => video.play());
+        marcador.addEventListener('targetLost', () => video.pause());
+
+        document.body.addEventListener('click', () => {
+          video.muted = false;
+          video.play();
+          aviso.style.display = 'none';
+        });
+      }
+    </script>
+  </body>
+</html>
