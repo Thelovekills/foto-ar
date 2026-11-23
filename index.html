@@ -21,11 +21,13 @@
   </head>
   <body>
     <script>
-      // 1. Leer parámetros de la URL (?id=nombre&ratio=1.33)
+      // 1. Leer parámetros: ?id=carpeta&total=3&ratio=1&max=2
       const params = new URLSearchParams(window.location.search);
       const id = params.get('id');
-     // const ratio = params.get('ratio') || '1';
-      const ratio = 2;
+      const total = parseInt(params.get('total') || '1', 10);
+      const ratio = params.get('ratio') || '1';
+      // Cuántas fotos se pueden reproducir al mismo tiempo (por defecto 2 en paquetes, 1 en individual)
+      const maxTrack = parseInt(params.get('max') || (total > 1 ? '2' : '1'), 10);
 
       if (!id) {
         document.body.innerHTML = `
@@ -34,63 +36,89 @@
           </div>`;
       } else {
         const rutaMind = `./${id}/targets.mind`;
-        const rutaVideo = `./${id}/video.mp4`;
+        let assetsHTML = '';
+        let targetsHTML = '';
 
-        // 2. Inyectar la escena dinámicamente
-        document.body.innerHTML = `
-          <div id="aviso-audio">Toca la pantalla para activar el sonido</div>
+        // 2. Generar dinámicamente los videos y marcadores
+        for (let i = 0; i < total; i++) {
+          const nombreVideo = total === 1 ? 'video.mp4' : `video${i + 1}.mp4`;
+          const rutaVideo = `./${id}/${nombreVideo}`;
 
-          <a-scene
-            mindar-image="imageTargetSrc: ${rutaMind};"
-            color-space="sRGB"
-            renderer="colorManagement: true, physicallyCorrectLights"
-            vr-mode-ui="enabled: false"
-            device-orientation-permission-ui="enabled: false"
-          >
-            <a-assets>
-              <video
-                id="mi-video"
-                src="${rutaVideo}"
-                preload="auto"
-                loop="true"
-                muted="true"
-                playsinline
-                webkit-playsinline
-                crossorigin="anonymous"
-              ></video>
-            </a-assets>
+          assetsHTML += `
+            <video
+              id="mi-video-${i}"
+              src="${rutaVideo}"
+              preload="auto"
+              loop="true"
+              muted="true"
+              playsinline
+              webkit-playsinline
+              crossorigin="anonymous"
+            ></video>
+          `;
 
-            <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-            <a-entity id="marcador" mindar-image-target="targetIndex: 0">
+          targetsHTML += `
+            <a-entity id="marcador-${i}" mindar-image-target="targetIndex: ${i}">
               <a-video
-                id="plano-video"
-                src="#mi-video"
+                class="plano-video"
+                src="#mi-video-${i}"
                 position="0 0 0"
                 width="1"
                 height="${ratio}"
                 rotation="0 0 0"
               ></a-video>
             </a-entity>
+          `;
+        }
+
+        // 3. Inyectar la escena completa
+        document.body.innerHTML = `
+          <div id="aviso-audio">Toca la pantalla para activar el sonido</div>
+
+          <a-scene
+            mindar-image="imageTargetSrc: ${rutaMind}; maxTrack: ${maxTrack};"
+            color-space="sRGB"
+            renderer="colorManagement: true, physicallyCorrectLights"
+            vr-mode-ui="enabled: false"
+            device-orientation-permission-ui="enabled: false"
+          >
+            <a-assets>${assetsHTML}</a-assets>
+            <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+            ${targetsHTML}
           </a-scene>
         `;
 
-        // 3. Conectar eventos de reproducción y audio
-        const marcador = document.querySelector('#marcador');
-        const video = document.querySelector('#mi-video');
+        // 4. Conectar reproducción y audio para cada foto del paquete
         const aviso = document.querySelector('#aviso-audio');
+        const videos = [];
+        const visibles = new Array(total).fill(false);
 
-        marcador.addEventListener('targetFound', () => video.play());
-        marcador.addEventListener('targetLost', () => video.pause());
+        for (let i = 0; i < total; i++) {
+          const marcador = document.querySelector(`#marcador-${i}`);
+          const video = document.querySelector(`#mi-video-${i}`);
+          videos.push(video);
+
+          marcador.addEventListener('targetFound', () => {
+            visibles[i] = true;
+            video.play();
+          });
+
+          marcador.addEventListener('targetLost', () => {
+            visibles[i] = false;
+            video.pause();
+          });
+        }
 
         document.body.addEventListener('click', () => {
-          video.muted = false;
-          video.play();
+          videos.forEach((video, i) => {
+            video.muted = false;
+            if (visibles[i]) video.play();
+          });
           aviso.style.display = 'none';
         });
 
-        // 4. Zoom con pellizco (dos dedos) sobre el video
-        const planoVideo = document.querySelector('#plano-video');
+        // 5. Zoom con pellizco (dos dedos) sobre los videos
+        const planos = document.querySelectorAll('.plano-video');
         let distanciaInicial = 0;
         let escalaActual = 1;
 
@@ -111,13 +139,15 @@
             );
             const factor = distanciaActual / distanciaInicial;
             const nuevaEscala = Math.min(Math.max(escalaActual * factor, 1), 3);
-            planoVideo.setAttribute('scale', `${nuevaEscala} ${nuevaEscala} 1`);
+            planos.forEach((plano) => {
+              plano.setAttribute('scale', `${nuevaEscala} ${nuevaEscala} 1`);
+            });
           }
         });
 
         document.addEventListener('touchend', (e) => {
           if (e.touches.length < 2) {
-            const scale = planoVideo.getAttribute('scale');
+            const scale = planos[0]?.getAttribute('scale');
             if (scale) escalaActual = scale.x;
             distanciaInicial = 0;
           }
