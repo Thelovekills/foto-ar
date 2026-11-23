@@ -24,7 +24,8 @@
       // 1. Leer parámetros de la URL (?id=nombre&ratio=1.33)
       const params = new URLSearchParams(window.location.search);
       const id = params.get('id');
-      const ratio = params.get('ratio') || '2';
+     // const ratio = params.get('ratio') || '1';
+      const ratio = 2;
 
       if (!id) {
         document.body.innerHTML = `
